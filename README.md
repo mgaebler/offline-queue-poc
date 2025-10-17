@@ -84,4 +84,4 @@ src/
 
 ## License
 
-Private project
+MIT
