@@ -1,6 +1,7 @@
 # Offline Queue POC - Spezifikation
 
 ## Projektziel
+
 Entwicklung eines Proof of Concept für eine Offline-Queue, die Formulardaten (Text + Bilder) lokal speichert und bei bestehender Internetverbindung automatisch an einen Server sendet.
 
 ---
@@ -8,6 +9,7 @@ Entwicklung eines Proof of Concept für eine Offline-Queue, die Formulardaten (T
 ## 1. Technologie-Stack
 
 ### Frontend
+
 - **Framework**: Vite + React
 - **Form Handling**: react-hook-form
 - **UI**: React Components mit CSS
@@ -15,11 +17,13 @@ Entwicklung eines Proof of Concept für eine Offline-Queue, die Formulardaten (T
 - **Browser-Datenbank**: IndexedDB via `idb` Package
 
 ### Backend (Mock)
+
 - **Mock-Server**: Express.js mit Multer
 
 **Wichtig**: json-server kann kein FormData mit Bildern verarbeiten, daher nutzen wir Express mit Multer.
 
 ### NPM Packages
+
 ```json
 {
   "react": "^19.1.0",
@@ -102,6 +106,7 @@ interface QueueItem {
 ```
 
 ### Indices
+
 - `status`: Für schnelle Abfrage nach Status
 - `timestamp`: Für chronologische Sortierung
 
@@ -110,9 +115,11 @@ interface QueueItem {
 ## 4. Komponenten-Beschreibung
 
 ### 4.1 Formular (UI)
+
 **Datei**: `src/components/FormComponent.js`
 
 **Features**:
+
 - Eingabefelder für Text (z.B. Name, Beschreibung)
 - File-Input für Bilder (multiple)
 - Submit-Button
@@ -121,6 +128,7 @@ interface QueueItem {
 - Vorschau hochgeladener Bilder
 
 **Validierung**:
+
 - Pflichtfelder prüfen
 - Bildgröße limitieren (z.B. max 5MB pro Bild)
 - Erlaubte Bildformate: JPG, PNG, WebP
@@ -128,6 +136,7 @@ interface QueueItem {
 ---
 
 ### 4.2 Queue Manager
+
 **Datei**: `src/services/QueueManager.js`
 
 **Methoden**:
@@ -157,9 +166,11 @@ class QueueManager {
 ---
 
 ### 4.3 Service Worker
+
 **Datei**: `public/sw.js` (via Workbox generiert)
 
 **Verantwortlichkeiten**:
+
 1. **Online/Offline Detection**
    - `navigator.onLine` Event Listener
    - Periodische Connectivity-Checks (optional)
@@ -174,6 +185,7 @@ class QueueManager {
    - Auch wenn Browser im Hintergrund läuft
 
 **Events**:
+
 ```javascript
 // Online-Event
 self.addEventListener('online', async () => {
@@ -191,9 +203,11 @@ self.addEventListener('sync', async (event) => {
 ---
 
 ### 4.4 API Client
+
 **Datei**: `src/services/ApiClient.js`
 
 **Methode**:
+
 ```javascript
 async function submitFormData(queueItem) {
   const formData = new FormData();
@@ -237,13 +251,15 @@ User Submit → Queue (IndexedDB) → Queue Processor → API
           Verarbeitung wenn online
 ```
 
-### Vorteile:
+### Vorteile
+
 - ✅ Konsistente Logik (kein Unterschied zwischen online/offline)
 - ✅ Robustheit (auch bei instabiler Verbindung keine Datenverluste)
 - ✅ Retry-Mechanismus funktioniert für alle Requests
 - ✅ Persistenz (Browser-Refresh verliert keine Daten)
 
 ### Szenario 1: Online-Submission
+
 1. User füllt Formular aus
 2. User klickt "Submit"
 3. **Daten werden zur Queue hinzugefügt** (Status: `pending`)
@@ -254,6 +270,7 @@ User Submit → Queue (IndexedDB) → Queue Processor → API
 8. User erhält Erfolgsmeldung
 
 ### Szenario 2: Offline-Submission
+
 1. User füllt Formular aus (Offline)
 2. User klickt "Submit"
 3. **Daten werden in Queue gespeichert** (Status: `pending`)
@@ -305,12 +322,14 @@ async function processQueue() {
 }
 ```
 
-### Trigger-Punkte für Queue-Processing:
+### Trigger-Punkte für Queue-Processing
+
 1. **Nach jedem Form-Submit** (sofort, wenn online)
 2. **Online-Event** (window.addEventListener('online'))
 3. **App-Start** (beim Laden, falls online und Queue nicht leer)
 
 ### Retry-Logik
+
 ```javascript
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 5000, 15000]; // 1s, 5s, 15s
@@ -333,6 +352,7 @@ async function processQueueItem(item) {
 ```
 
 ### Error-Kategorien
+
 - **Network Error**: Retry
 - **4xx Client Error**: Nicht retryen, als Error markieren
 - **5xx Server Error**: Retry mit Backoff
@@ -343,6 +363,7 @@ async function processQueueItem(item) {
 ## 7. UI/UX Überlegungen
 
 ### Status-Indikator
+
 ```
 ┌─────────────────────────────┐
 │ ● Online  │  Queue: 3 Items │
@@ -350,7 +371,9 @@ async function processQueueItem(item) {
 ```
 
 ### Queue-Übersicht (Optional)
+
 Eine Liste mit ausstehenden Einträgen:
+
 - Timestamp
 - Status
 - Retry-Count
@@ -358,6 +381,7 @@ Eine Liste mit ausstehenden Einträgen:
 - Manueller "Retry" Button
 
 ### Notifications
+
 - Browser-Notifications bei erfolgreicher Übermittlung
 - Toast-Messages für User-Feedback
 
@@ -389,26 +413,31 @@ Eine Liste mit ausstehenden Einträgen:
 ## 10. Implementierungs-Schritte
 
 ### Phase 1: Basis-Setup
+
 - [ ] Vite-Projekt erstellen
 - [ ] Grundlegendes HTML-Formular
 - [ ] IndexedDB Setup mit `idb` Package
 
 ### Phase 2: Queue Manager
+
 - [ ] QueueManager-Klasse implementieren
 - [ ] CRUD-Operationen für Queue-Items
 - [ ] Unit Tests
 
 ### Phase 3: Service Worker
+
 - [ ] Workbox konfigurieren
 - [ ] Online/Offline Detection
 - [ ] Queue Processing Logik
 
 ### Phase 4: Integration
+
 - [ ] Formular mit Queue Manager verbinden
 - [ ] API Client implementieren
 - [ ] Mock-Server für Tests
 
 ### Phase 5: Polish
+
 - [ ] UI-Verbesserungen
 - [ ] Error Handling verfeinern
 - [ ] Notifications implementieren
@@ -464,6 +493,7 @@ Eine Liste mit ausstehenden Einträgen:
 ## Nächste Schritte
 
 Welche Aspekte möchtest du zuerst detaillierter besprechen?
+
 - Technologie-Entscheidungen (Vanilla JS vs Framework?)
 - Datenbank-Schema verfeinern?
 - Service Worker Implementierungs-Details?
