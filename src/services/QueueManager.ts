@@ -67,23 +67,40 @@ class QueueManager {
     /**
      * Add item to queue
      */
-    async addToQueue(data: FormData, images: ImageData[]): Promise<string> {
-        const db = await this.ensureDB();
+    async addToQueue(data, images) {
+    const db = await this.getDB();
 
-        const queueItem: QueueItem = {
-            id: this.generateUUID(),
-            timestamp: Date.now(),
-            status: 'pending',
-            retryCount: 0,
-            data,
-            images,
-        };
+    const item = {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      status: 'pending',
+      retryCount: 0,
+      data,
+      images,
+    };
 
-        await db.add('formQueue', queueItem);
-        console.log('✅ Added to queue:', queueItem.id);
+    await db.add('formQueue', item);
+    console.log('Added to queue:', item);
+    
+    // Trigger Background Sync
+    await this.requestBackgroundSync();
+    
+    return item;
+  }
 
-        return queueItem.id;
+  async requestBackgroundSync() {
+    try {
+      if ('serviceWorker' in navigator && 'sync' in ServiceWorkerRegistration.prototype) {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.sync.register('sync-queue');
+        console.log('🔄 Background Sync registered');
+      } else {
+        console.warn('⚠️ Background Sync not supported');
+      }
+    } catch (error) {
+      console.error('❌ Background Sync registration failed:', error);
     }
+  }
 
     /**
      * Get all queue items (optionally filter by status)

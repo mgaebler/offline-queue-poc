@@ -177,28 +177,43 @@ class QueueManager {
 
 2. **Queue Processing**
    - Bei Online-Status: Pending Items verarbeiten
-   - Retry-Logik bei Fehlern
+   - Retry-Logik bei Fehlern (max 3 Versuche)
    - Exponential Backoff bei wiederholten Fehlern
 
-3. **Background Sync** (Optional, fortgeschritten)
+3. **Background Sync** ✅ **IMPLEMENTIERT**
+   - Service Worker registriert in `public/sw.js`
    - `sync` Event für automatische Synchronisation
-   - Auch wenn Browser im Hintergrund läuft
+   - Queue wird auch verarbeitet wenn Tab geschlossen ist
+   - Registrierung erfolgt automatisch beim Hinzufügen zur Queue
+   - Notification an Client nach erfolgreichem/fehlgeschlagenem Sync
 
-**Events**:
+**Service Worker Implementation**:
 
 ```javascript
-// Online-Event
-self.addEventListener('online', async () => {
-  await processQueue();
-});
+// Registrierung in main.jsx
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
 
-// Background Sync (optional)
+// Background Sync Trigger in QueueManager
+async requestBackgroundSync() {
+  const registration = await navigator.serviceWorker.ready;
+  await registration.sync.register('sync-queue');
+}
+
+// Sync Event Handler in sw.js
 self.addEventListener('sync', async (event) => {
   if (event.tag === 'sync-queue') {
-    event.waitUntil(processQueue());
+    event.waitUntil(syncQueue());
   }
 });
 ```
+
+**Communication Flow**:
+- QueueManager → Service Worker: Background Sync registrieren
+- Service Worker → IndexedDB: Pending Items abrufen
+- Service Worker → API: FormData senden
+- Service Worker → Client: Success/Error Message
 
 ---
 

@@ -13,6 +13,24 @@ function App() {
     setTimeout(() => setNotification(null), 5000);
   }, []);
 
+  // Listen to Service Worker messages
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        console.log('📨 Message from Service Worker:', event.data);
+        
+        if (event.data.type === 'sync-success') {
+          showNotification('✅ Background Sync erfolgreich', 'success');
+          // Trigger queue update event
+          window.dispatchEvent(new Event('queue-updated'));
+        } else if (event.data.type === 'sync-error') {
+          showNotification(`❌ Sync Fehler (Versuch ${event.data.retryCount}/3)`, 'error');
+          window.dispatchEvent(new Event('queue-updated'));
+        }
+      });
+    }
+  }, [showNotification]);
+
   const processQueue = useCallback(async () => {
     // Only process if online
     if (!navigator.onLine) {
