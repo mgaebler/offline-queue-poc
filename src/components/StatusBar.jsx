@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { queueManager } from '../services/QueueManager';
+import { useAppSelector } from '../store/hooks';
+import { selectQueueSize } from '../store/queueSlice';
 import './StatusBar.css';
 
 export function StatusBar() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
-    const [queueSize, setQueueSize] = useState(0);
+    const queueSize = useAppSelector(selectQueueSize);
 
     useEffect(() => {
         // Update online status
@@ -14,21 +15,9 @@ export function StatusBar() {
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
-        // Update queue size
-        const updateQueueSize = async () => {
-            const size = await queueManager.getQueueSize();
-            setQueueSize(size);
-        };
-
-        updateQueueSize();
-
-        // Listen for queue updates
-        window.addEventListener('queue-updated', updateQueueSize);
-
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
-            window.removeEventListener('queue-updated', updateQueueSize);
         };
     }, []);
 

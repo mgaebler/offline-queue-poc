@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { queueManager } from '../services/QueueManager';
+import { useAppDispatch } from '../store/hooks';
+import { addToQueue } from '../store/queueSlice';
+import { indexedDBManager } from '../services/IndexedDBManager';
 import './SubmissionForm.css';
 
 export function SubmissionForm({ onSubmitSuccess }) {
+    const dispatch = useAppDispatch();
     const { register, handleSubmit, reset, formState: { errors } } = useForm();
     const [images, setImages] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -17,22 +20,22 @@ export function SubmissionForm({ onSubmitSuccess }) {
         setIsSubmitting(true);
 
         try {
-            // Convert files to ImageData
-            const imageData = await Promise.all(
+            // 1. Save images to IndexedDB BEFORE dispatching to Redux
+            // This keeps non-serializable Blobs out of Redux actions
+            const imageIds = await Promise.all(
                 images.map(async (file) => {
-                    return {
-                        fieldName: 'image',
-                        blob: file,
-                        fileName: file.name,
-                        mimeType: file.type,
-                    };
+                    const blob = new Blob([await file.arrayBuffer()], { type: file.type });
+                    return indexedDBManager.saveImage(blob, file.name, file.type);
                 })
             );
 
-            // Add to queue
-            const id = await queueManager.addToQueue(data, imageData);
+            // 2. Dispatch Redux action with only serializable data (imageIds)
+            const result = await dispatch(addToQueue({
+                data,
+                imageIds
+            })).unwrap();
 
-            console.log('✅ Form submitted to queue:', id);
+            console.log('✅ Form submitted to queue:', result.id);
 
             // Reset form
             reset();
@@ -40,11 +43,8 @@ export function SubmissionForm({ onSubmitSuccess }) {
 
             // Notify parent
             if (onSubmitSuccess) {
-                onSubmitSuccess(id);
+                onSubmitSuccess(result.id);
             }
-
-            // Trigger queue processing (will be handled by service worker)
-            window.dispatchEvent(new Event('queue-updated'));
 
         } catch (error) {
             console.error('❌ Failed to submit form:', error);
