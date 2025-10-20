@@ -23,7 +23,8 @@ export interface FormData {
 }
 
 /**
- * Queue Item Structure
+ * Queue Item Structure (Redux State)
+ * Images are stored separately in IndexedDB, only IDs in state
  */
 export interface QueueItem {
     id: string;
@@ -31,8 +32,15 @@ export interface QueueItem {
     status: QueueItemStatus;
     retryCount: number;
     data: FormData;
-    images: ImageData[];
+    imageIds: string[];  // References to images in IndexedDB
     error?: string;
+}
+
+/**
+ * Queue Item with loaded images (for API submission)
+ */
+export interface QueueItemWithImages extends Omit<QueueItem, 'imageIds'> {
+    images: ImageData[];
 }
 
 /**
