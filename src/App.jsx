@@ -68,10 +68,18 @@ function App() {
   }, [showNotification]);
 
   useEffect(() => {
-    // Initialize IndexedDB
-    queueManager.init().then(() => {
+    // Initialize IndexedDB and process queue
+    const initAndProcess = async () => {
+      await queueManager.init();
       console.log('✅ Queue Manager initialized');
-    });
+
+      // Process existing queue items on mount (if online)
+      if (navigator.onLine) {
+        await processQueue();
+      }
+    };
+
+    initAndProcess();
 
     // Process queue when coming online
     const handleOnline = async () => {
@@ -81,14 +89,17 @@ function App() {
 
     window.addEventListener('online', handleOnline);
 
-    // Try to process existing queue items on mount (if online)
-    if (navigator.onLine) {
-      // Small delay to ensure DB is initialized
-      setTimeout(() => processQueue(), 500);
-    }
+    // Set up interval to retry pending items every 30 seconds (only when online)
+    const retryInterval = setInterval(() => {
+      if (navigator.onLine) {
+        console.log('🔄 Retry interval - checking queue...');
+        processQueue();
+      }
+    }, 30000); // 30 seconds
 
     return () => {
       window.removeEventListener('online', handleOnline);
+      clearInterval(retryInterval);
     };
   }, [processQueue]);
 

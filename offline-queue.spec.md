@@ -11,10 +11,11 @@ Entwicklung eines Proof of Concept für eine Offline-Queue, die Formulardaten (T
 ### Frontend
 
 - **Framework**: Vite + React
-- **Form Handling**: react-hook-form
+- **State Management**: Redux Toolkit
+- **Form Handling**: React State Management
 - **UI**: React Components mit CSS
-- **Service Worker**: Workbox (Google's PWA-Library)
-- **Browser-Datenbank**: IndexedDB via `idb` Package
+- **Browser-Datenbank**: IndexedDB via `idb` Package (Persistenz-Layer)
+- **Queue Processing**: React-basiert im Main-Thread mit Redux Thunks
 
 ### Backend (Mock)
 
@@ -28,12 +29,12 @@ Entwicklung eines Proof of Concept für eine Offline-Queue, die Formulardaten (T
 {
   "react": "^19.1.0",
   "react-dom": "^19.1.0",
-  "react-hook-form": "^7.65.0",
-  "idb": "^8.0.0",                   // IndexedDB Wrapper
+  "@reduxjs/toolkit": "^2.x",        // Redux State Management
+  "react-redux": "^9.x",             // React Bindings für Redux
+  "idb": "^8.0.0",                   // IndexedDB Wrapper (Persistenz)
   "express": "^4.18.0",              // Mock API Server
   "multer": "^1.4.5",                // FormData/File Upload Handling
-  "cors": "^2.8.5",                  // CORS Middleware
-  "vite-plugin-pwa": "^1.1.0"        // PWA Plugin für Vite (optional)
+  "cors": "^2.8.5"                   // CORS Middleware
 }
 ```
 
@@ -46,45 +47,66 @@ flowchart TB
     subgraph Browser["Browser/Client"]
         direction TB
         
-        subgraph UILayer["UI Layer"]
-            Form["Formular<br/>Text Inputs<br/>Image Upload<br/>Submit Button"]
+        subgraph UILayer["UI Layer (React)"]
+            Form["Formular Component<br/>useDispatch<br/>Submit Actions"]
+            Status["Status Bar<br/>useSelector<br/>Queue State Display"]
         end
         
-        subgraph QueueMgr["Queue Manager"]
-            QM["Queue Operations<br/>addToQueue<br/>getQueue<br/>removeFromQueue<br/>updateStatus"]
+        subgraph StateLayer["Redux Store"]
+            Store["Redux State<br/>items: QueueItem[]<br/>(Metadaten + imageIds)<br/>loading, error"]
+            Thunks["Async Thunks<br/>addToQueue()<br/>processQueue()<br/>deleteItem()"]
+        end
+        
+        subgraph PersistenceLayer["Persistenz Layer"]
+            DBManager["IndexedDB Manager<br/>saveQueueItem()<br/>saveImage()<br/>getImage()"]
         end
         
         subgraph Database["IndexedDB"]
-            DB["Store: formQueue<br/>id: string<br/>timestamp: number<br/>status: enum<br/>data: object<br/>images: Blob array"]
+            DB1["Store: formQueue<br/>Metadaten ohne Blobs"]
+            DB2["Store: queueImages<br/>imageId → Blob"]
         end
         
-        subgraph SW["Service Worker"]
-            ServiceWorker["Online/Offline Detection<br/>Queue Processing<br/>Background Sync<br/>Retry Logic"]
+        subgraph APILayer["API Client"]
+            API_CLIENT["ApiClient<br/>submitFormData<br/>ping/health check"]
         end
         
-        Form -->|Submit Data| QM
-        QM -->|Store| DB
-        QM -->|Notify| ServiceWorker
-        ServiceWorker -.->|Read Queue| DB
-        ServiceWorker -->|Update Status| DB
+        Form -->|dispatch actions| Thunks
+        Status -.->|useSelector| Store
+        Thunks -->|update state| Store
+        Thunks -->|persist| DBManager
+        Thunks -->|load images| DBManager
+        Thunks -->|submit| API_CLIENT
+        DBManager -->|write/read| DB1
+        DBManager -->|write/read| DB2
     end
     
-    ServiceWorker ==>|POST /submit when online| API["Backend API<br/>POST /submit"]
+    API_CLIENT ==>|POST /submit when online| API["Backend API<br/>POST /submit"]
     
     style Form fill:#e1f5ff,stroke:#333,stroke-width:2px
-    style QM fill:#fff4e1,stroke:#333,stroke-width:2px
-    style DB fill:#e8f5e9,stroke:#333,stroke-width:2px
-    style ServiceWorker fill:#f3e5f5,stroke:#333,stroke-width:2px
+    style Status fill:#e1f5ff,stroke:#333,stroke-width:2px
+    style Store fill:#fff4e1,stroke:#333,stroke-width:2px
+    style Thunks fill:#fff4e1,stroke:#333,stroke-width:2px
+    style DBManager fill:#e8f5e9,stroke:#333,stroke-width:2px
+    style DB1 fill:#e8f5e9,stroke:#333,stroke-width:2px
+    style DB2 fill:#e8f5e9,stroke:#333,stroke-width:2px
+    style API_CLIENT fill:#f3e5f5,stroke:#333,stroke-width:2px
     style API fill:#ffebee,stroke:#333,stroke-width:2px
 ```
 
 ---
 
-## 3. Datenbank-Schema (IndexedDB)
+## 3. State & Datenbank-Schema
 
-### Object Store: `formQueue`
+### Redux State (Memory - Source of Truth für UI)
 
 ```typescript
+interface QueueState {
+  items: QueueItem[];
+  loading: boolean;
+  error: string | null;
+  processingItemId: string | null;
+}
+
 interface QueueItem {
   id: string;              // UUID v4
   timestamp: number;       // Date.now()
@@ -95,20 +117,45 @@ interface QueueItem {
     textField2: string;
     // ... weitere Textfelder
   };
-  images: Array<{
-    fieldName: string;
-    blob: Blob;            // Bild als Blob
-    fileName: string;
-    mimeType: string;
-  }>;
+  imageIds: string[];      // ⚠️ Nur Referenzen, keine Blobs!
   error?: string;          // Fehlermeldung bei gescheiterten Versuchen
 }
 ```
 
-### Indices
+### IndexedDB Schema (Persistenz)
 
+**Object Store 1: `formQueue`** (Metadaten)
+```typescript
+{
+  id: string;
+  timestamp: number;
+  status: 'pending' | 'sending' | 'sent' | 'error';
+  retryCount: number;
+  data: FormData;
+  imageIds: string[];      // Referenzen zu queueImages
+  error?: string;
+}
+```
+
+**Indices:**
 - `status`: Für schnelle Abfrage nach Status
 - `timestamp`: Für chronologische Sortierung
+
+**Object Store 2: `queueImages`** (Blobs)
+```typescript
+{
+  imageId: string;         // UUID (Primary Key)
+  blob: Blob;             // Bild-Daten
+  fileName: string;
+  mimeType: string;
+  uploadedAt: number;
+}
+```
+
+**Warum getrennt?**
+- Redux State bleibt serializable
+- Blobs werden nur bei Bedarf geladen (Performance)
+- Kleinere Memory-Footprint
 
 ---
 
@@ -135,74 +182,138 @@ interface QueueItem {
 
 ---
 
-### 4.2 Queue Manager
+### 4.2 Redux Queue Slice
 
-**Datei**: `src/services/QueueManager.js`
+**Datei**: `src/store/queueSlice.ts`
 
-**Methoden**:
+**Async Thunks**:
 
-```javascript
-class QueueManager {
-  // Eintrag zur Queue hinzufügen
-  async addToQueue(formData, images): Promise<string>
-  
-  // Alle Queue-Einträge abrufen
-  async getQueueItems(status?: string): Promise<QueueItem[]>
-  
-  // Eintrag aus Queue entfernen
-  async removeFromQueue(id: string): Promise<void>
-  
-  // Status eines Eintrags aktualisieren
-  async updateStatus(id: string, status: string): Promise<void>
-  
-  // Queue-Größe abrufen
-  async getQueueSize(): Promise<number>
-  
-  // Alle 'pending' Items abrufen
-  async getPendingItems(): Promise<QueueItem[]>
-}
+```typescript
+// Queue beim App-Start laden
+initQueue(): AsyncThunk
+
+// Neues Item zur Queue hinzufügen
+addToQueue({ data, images }): AsyncThunk
+
+// Alle pending Items verarbeiten
+processQueue(): AsyncThunk
+
+// Einzelnes Item löschen
+deleteItem(id): AsyncThunk
+
+// Item-Status aktualisieren
+updateItemStatus(id, status): AsyncThunk
+```
+
+**Selectors**:
+
+```typescript
+selectAllItems(state): QueueItem[]
+selectPendingItems(state): QueueItem[]
+selectQueueSize(state): number
+selectIsLoading(state): boolean
+```
+
+**Usage in Components**:
+
+```typescript
+// Dispatch Actions
+const dispatch = useDispatch();
+dispatch(addToQueue({ data, images }));
+
+// Read State
+const queueSize = useSelector(selectQueueSize);
 ```
 
 ---
 
-### 4.3 Service Worker
+### 4.3 IndexedDB Manager
 
-**Datei**: `public/sw.js` (via Workbox generiert)
+**Datei**: `src/services/IndexedDBManager.ts`
+
+**Methoden** (Low-Level Persistenz):
+
+```typescript
+class IndexedDBManager {
+  // Queue Items (Metadaten)
+  async saveQueueItem(item: QueueItem): Promise<void>
+  async getQueueItem(id: string): Promise<QueueItem>
+  async getAllQueueItems(): Promise<QueueItem[]>
+  async deleteQueueItem(id: string): Promise<void>
+  
+  // Images (Blobs)
+  async saveImage(blob: Blob, fileName: string, mimeType: string): Promise<string>
+  async getImage(imageId: string): Promise<ImageData>
+  async deleteImage(imageId: string): Promise<void>
+}
+```
+
+**Wichtig**: Wird nicht direkt von Komponenten aufgerufen, nur von Redux Thunks!
+
+---
+
+### 4.4 App Logic (Queue Processing)
+
+**Datei**: `src/App.jsx`
 
 **Verantwortlichkeiten**:
 
 1. **Online/Offline Detection**
-   - `navigator.onLine` Event Listener
-   - Periodische Connectivity-Checks (optional)
+   - `window.addEventListener('online')` Event Listener
+   - `navigator.onLine` Status-Prüfung
 
 2. **Queue Processing**
    - Bei Online-Status: Pending Items verarbeiten
-   - Retry-Logik bei Fehlern
-   - Exponential Backoff bei wiederholten Fehlern
+   - Retry-Logik bei Fehlern (max. 3 Versuche)
+   - Automatisches Retry-Intervall (alle 30 Sekunden)
 
-3. **Background Sync** (Optional, fortgeschritten)
-   - `sync` Event für automatische Synchronisation
-   - Auch wenn Browser im Hintergrund läuft
+3. **Trigger-Punkte**
+   - Nach Form-Submit (wenn online)
+   - Bei "online" Event (Verbindung wiederhergestellt)
+   - Periodisches Polling (30s Intervall)
+   - Beim App-Start (wenn online und Queue nicht leer)
 
-**Events**:
+**Implementation**:
 
 ```javascript
-// Online-Event
-self.addEventListener('online', async () => {
-  await processQueue();
-});
+useEffect(() => {
+  // Initialize IndexedDB and process queue
+  const initAndProcess = async () => {
+    await queueManager.init();
+    if (navigator.onLine) {
+      await processQueue();
+    }
+  };
 
-// Background Sync (optional)
-self.addEventListener('sync', async (event) => {
-  if (event.tag === 'sync-queue') {
-    event.waitUntil(processQueue());
-  }
-});
+  initAndProcess();
+
+  // Process queue when coming online
+  const handleOnline = async () => {
+    console.log('🌐 Connection restored - processing queue...');
+    await processQueue();
+  };
+
+  window.addEventListener('online', handleOnline);
+
+  // Set up interval to retry pending items every 30 seconds
+  const retryInterval = setInterval(() => {
+    if (navigator.onLine) {
+      processQueue();
+    }
+  }, 30000);
+
+  return () => {
+    window.removeEventListener('online', handleOnline);
+    clearInterval(retryInterval);
+  };
+}, [processQueue]);
 ```
+
+**Wichtig**: Kein Service Worker - Queue Processing läuft nur bei geöffneter App im Browser.
 
 ---
 
-### 4.4 API Client
+### 4.5 API Client
 
 **Datei**: `src/services/ApiClient.js`
 
@@ -327,6 +438,7 @@ async function processQueue() {
 1. **Nach jedem Form-Submit** (sofort, wenn online)
 2. **Online-Event** (window.addEventListener('online'))
 3. **App-Start** (beim Laden, falls online und Queue nicht leer)
+4. **Polling-Intervall** (alle 30 Sekunden, wenn online)
 
 ### Retry-Logik
 
@@ -424,11 +536,11 @@ Eine Liste mit ausstehenden Einträgen:
 - [ ] CRUD-Operationen für Queue-Items
 - [ ] Unit Tests
 
-### Phase 3: Service Worker
+### Phase 3: App Logic & Queue Processing
 
-- [ ] Workbox konfigurieren
-- [ ] Online/Offline Detection
-- [ ] Queue Processing Logik
+- [x] Online/Offline Detection (window events)
+- [x] Queue Processing im React useEffect
+- [x] Retry-Intervall implementieren
 
 ### Phase 4: Integration
 
@@ -471,11 +583,26 @@ Eine Liste mit ausstehenden Einträgen:
    - Granulares Status-Update pro Item
    - Klarere User-Experience
 
-6. **Background Sync**: ✅ Nur bei offenem Browser
-   - Online/Offline Event Listener im Service Worker
+6. **State Management**: ✅ Redux Toolkit
+   - Konsistent mit bestehender App-Architektur
+   - Redux als UI State Source of Truth
+   - IndexedDB als Persistenz-Layer (nur für Metadaten + Blobs)
+   - Keine Blobs im Redux State (serializable!)
+   - Redux DevTools für Debugging
+
+7. **Queue Processing**: ✅ Nur bei offenem Browser (kein Service Worker)
+   - Online/Offline Event Listener in React App
+   - Polling-Intervall für automatische Retries
    - Funktioniert in allen Browsern
    - Einfacher zu implementieren & debuggen
-   - Background Sync API als späteres "Nice-to-Have"
+   - Keine Background Sync API (komplexer, nicht überall unterstützt)
+   - **Trade-off**: Queue wird nur verarbeitet wenn App offen ist
+
+8. **Blob-Speicherung**: ✅ Separate IndexedDB Store
+   - Blobs getrennt von Metadaten
+   - Lazy Loading bei Bedarf
+   - Kleinere Redux State-Größe
+   - Custom Hook `useQueueImages()` für Image Loading
 
 ---
 
@@ -490,11 +617,16 @@ Eine Liste mit ausstehenden Einträgen:
 
 ---
 
+## Migrations-Plan
+
+Die detaillierte Migrations-Planung zur Redux-Integration findest du in:
+**[REDUX-MIGRATION-PLAN.md](./REDUX-MIGRATION-PLAN.md)**
+
+---
+
 ## Nächste Schritte
 
-Welche Aspekte möchtest du zuerst detaillierter besprechen?
-
-- Technologie-Entscheidungen (Vanilla JS vs Framework?)
-- Datenbank-Schema verfeinern?
-- Service Worker Implementierungs-Details?
-- Mock-Server Setup?
+1. Review der Redux-Architektur
+2. Start mit Phase 1: Redux Toolkit Installation
+3. Schrittweise Migration gemäß Plan
+4. Testing nach jeder Phase
