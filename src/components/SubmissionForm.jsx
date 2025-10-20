@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAppDispatch } from '../store/hooks';
-import { addToQueue } from '../store/queueSlice';
+import { addToQueueThunk } from '../store/queueSlice';
 import { indexedDBManager } from '../services/IndexedDBManager';
 import './SubmissionForm.css';
 
@@ -30,7 +30,7 @@ export function SubmissionForm({ onSubmitSuccess }) {
             );
 
             // 2. Dispatch Redux action with only serializable data (imageIds)
-            const result = await dispatch(addToQueue({
+            const result = await dispatch(addToQueueThunk({
                 data,
                 imageIds
             })).unwrap();

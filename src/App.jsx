@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAppDispatch } from './store/hooks';
-import { initQueue, processQueue } from './store/queueSlice';
+import { initQueueThunk, processQueueThunk } from './store/queueSlice';
 import { StatusBar } from './components/StatusBar';
 import { SubmissionForm } from './components/SubmissionForm';
 import './App.css';
@@ -15,12 +15,12 @@ function App() {
   }, []);
 
   const handleProcessQueue = useCallback(() => {
-    dispatch(processQueue());
+    dispatch(processQueueThunk());
   }, [dispatch]);
 
   useEffect(() => {
     // Initialize Queue from IndexedDB
-    dispatch(initQueue());
+    dispatch(initQueueThunk());
 
     // Process queue if online on mount
     if (navigator.onLine) {

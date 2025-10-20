@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { QueueItem, FormData } from '../types/queue';
+import type { QueueItem, FormData } from '../store/queue';
 
 /**
  * Image data stored in IndexedDB

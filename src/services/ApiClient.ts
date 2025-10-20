@@ -1,4 +1,4 @@
-import type { QueueItemWithImages, ApiResponse } from '../types/queue';
+import type { QueueItemWithImages, ApiResponse } from '../store/queue';
 
 /**
  * API Client for submitting form data

@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import type { QueueItem, QueueItemStatus, FormData } from '../types/queue';
+import type { QueueItem, QueueItemStatus, FormData } from './queue';
 import { indexedDBManager, type QueueItemDB, type ImageData } from '../services/IndexedDBManager';
 import { apiClient } from '../services/ApiClient';
 
@@ -24,7 +24,7 @@ const initialState: QueueState = {
 /**
  * Initialize queue - Load items from IndexedDB on app start
  */
-export const initQueue = createAsyncThunk(
+export const initQueueThunk = createAsyncThunk(
     'queue/init',
     async () => {
         await indexedDBManager.init();
@@ -38,7 +38,7 @@ export const initQueue = createAsyncThunk(
  * Add new item to queue
  * Images are already saved to IndexedDB, we just get their IDs
  */
-export const addToQueue = createAsyncThunk(
+export const addToQueueThunk = createAsyncThunk(
     'queue/add',
     async ({ data, imageIds }: { data: FormData; imageIds: string[] }) => {
         // Create queue item with pre-saved image IDs
@@ -61,7 +61,7 @@ export const addToQueue = createAsyncThunk(
 /**
  * Process all pending items in the queue
  */
-export const processQueue = createAsyncThunk(
+export const processQueueThunk = createAsyncThunk(
     'queue/process',
     async (_, { getState, dispatch }) => {
         if (!navigator.onLine) {
@@ -192,41 +192,41 @@ const queueSlice = createSlice({
     extraReducers: (builder) => {
         builder
             // initQueue
-            .addCase(initQueue.pending, (state) => {
+            .addCase(initQueueThunk.pending, (state) => {
                 state.loading = true;
                 state.error = null;
             })
-            .addCase(initQueue.fulfilled, (state, action) => {
+            .addCase(initQueueThunk.fulfilled, (state, action) => {
                 state.items = action.payload;
                 state.loading = false;
             })
-            .addCase(initQueue.rejected, (state, action) => {
+            .addCase(initQueueThunk.rejected, (state, action) => {
                 state.error = action.error.message || 'Failed to initialize queue';
                 state.loading = false;
             })
 
             // addToQueue
-            .addCase(addToQueue.pending, (state) => {
+            .addCase(addToQueueThunk.pending, (state) => {
                 state.loading = true;
                 state.error = null;
             })
-            .addCase(addToQueue.fulfilled, (state, action) => {
+            .addCase(addToQueueThunk.fulfilled, (state, action) => {
                 state.items.push(action.payload);
                 state.loading = false;
             })
-            .addCase(addToQueue.rejected, (state, action) => {
+            .addCase(addToQueueThunk.rejected, (state, action) => {
                 state.error = action.error.message || 'Failed to add item to queue';
                 state.loading = false;
             })
 
             // processQueue
-            .addCase(processQueue.pending, (state) => {
+            .addCase(processQueueThunk.pending, (state) => {
                 state.loading = true;
             })
-            .addCase(processQueue.fulfilled, (state) => {
+            .addCase(processQueueThunk.fulfilled, (state) => {
                 state.loading = false;
             })
-            .addCase(processQueue.rejected, (state, action) => {
+            .addCase(processQueueThunk.rejected, (state, action) => {
                 state.error = action.error.message || 'Failed to process queue';
                 state.loading = false;
             })
