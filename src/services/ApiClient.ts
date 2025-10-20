@@ -1,4 +1,4 @@
-import { QueueItem, ApiResponse } from '../types/queue';
+import type { QueueItemWithImages, ApiResponse } from '../types/queue';
 
 /**
  * API Client for submitting form data
@@ -13,12 +13,12 @@ class ApiClient {
     /**
      * Submit form data to the server
      */
-    async submitFormData(queueItem: QueueItem): Promise<ApiResponse> {
+    async submitFormData(queueItem: QueueItemWithImages): Promise<ApiResponse> {
         const formData = new FormData();
 
         // Add text fields
         Object.entries(queueItem.data).forEach(([key, value]) => {
-            formData.append(key, value);
+            formData.append(key, String(value));
         });
 
         // Add metadata
